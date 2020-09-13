@@ -1,0 +1,9 @@
+{
+  "env": {
+    "production": {
+      "presets": [["@babel/preset-env"], "minify"],
+      "comments": false
+    }
+  },
+  "plugins": ["@babel/plugin-transform-runtime"]
+}

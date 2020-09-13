@@ -1,0 +1,14 @@
+.DS_Store
+.npm
+.nyc_output
+*.log
+coverage
+dist
+logs
+node_modules
+npm-debug.log*
+others
+package-lock.json
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
