@@ -22,8 +22,8 @@ sade(`${pkg.name} <entry>`, true)
   .option('--noBundle', 'Do not bundle builtin/shim or node package modules', false)
   .option('--noMinify', 'Do not minify bundle code', false)
   .option('--noGlobals', 'Do not require global shims/polyfills at the top of entry functions', false)
-  .option('--noBabel', 'Disable global shims/polyfills & transforms, ie. ES modules & async to promises', false)
-  .option('--noRequireUrl', 'Disable module require by url', false)
+  .option('--noBabel', 'Disable inline JSON import, ES modules & async to promises', false)
+  .option('--noRequireUrl', 'Disable cjs module require by url', false)
   .action(
     (
       entry,

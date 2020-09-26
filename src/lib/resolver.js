@@ -26,7 +26,7 @@ function resolver(filename = missing('filename'), opts) {
   cache[filename] = [...modules];
 
   if (module.requires.length) {
-    dbgresolver(module.gas.path, 'resolving dependencies:', module.requires);
+    dbgresolver('traversing', module.filename, 'dependencies:', module.requires);
     for (let dependency of module.requires) {
       opts.parent = module.filename;
 
@@ -39,11 +39,13 @@ function resolver(filename = missing('filename'), opts) {
         const resolve = browserResolve; //TODO opts switch
         resolved[dependency] = resolve(dependency, { basedir: module.path, moduleDirectory: opts.paths });
       }
+      dbgresolver('resolved', dependency, '=>', resolved[dependency]);
 
-      // traverse dependency tree
+      // recursively traverse dependency tree
       for (let depModule of resolver(resolved[dependency], { cache, ...opts })) {
         modules.add(depModule);
       }
+
       // dependency map for use by global require chain
       module.map[dependency] = [...modules].find((m) => m.filename === resolved[dependency]).id;
     }

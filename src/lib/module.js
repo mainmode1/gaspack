@@ -1,4 +1,3 @@
-const fs = require('fs');
 const path = require('path');
 
 const dbgmeta = require('debug')('module:meta'),
@@ -7,8 +6,8 @@ const dbgmeta = require('debug')('module:meta'),
 const File = require('vinyl');
 const detective = require('detective');
 
-const { injectBuiltinGlobals, gasTransforms } = require('./babel');
-const { cleanSrcBuf, fnv32a, isChildPath, isUrl, makeEnum, missing, uniqArr, xtend } = require('./helpers');
+const { gasTransforms, injectBuiltinGlobals } = require('./babel');
+const { fnv32a, isChildPath, isJson, isUrl, makeEnum, missing, uniqArr, xtend } = require('./helpers');
 
 const ModType = makeEnum(['ENTRY', 'APP', 'LIB', 'BUILTIN', 'NODE', 'BUNDLE']);
 
@@ -20,7 +19,7 @@ const gasProjDefaultPaths = {
 
 const gasShims = path.normalize(path.resolve(__dirname, '../gas'));
 
-// model from: https://nodejs.org/api/modules.html#modules_the_module_object
+// adapted from: https://nodejs.org/api/modules.html#modules_the_module_object
 const GasModule = {
   children: [], // module objects required for the first time by this one; gaspack: filename map
   exports: {},
@@ -57,7 +56,8 @@ function _gasProjFileMeta(filename, opts) {
 
   gasPaths = xtend(gasProjDefaultPaths, gasPaths);
 
-  const vrelative = filename.split(basedir)[1].replace(/^\/+/, ''),
+  const re = new RegExp(`${basedir}(.+)`),
+    vrelative = filename.split(re)[1].replace(/^\/+/, ''),
     vreldirname = path.parse(vrelative).dir,
     vbase =
       type === ModType.LIB
@@ -84,18 +84,16 @@ function create(filename = missing('filename'), opts) {
 
   let { type, basedir, vpath, id } = _gasProjFileMeta(filename, opts);
 
-  if (!fs.existsSync(filename)) throw Error(`module file: ${filename} does not exist`);
-  let source = cleanSrcBuf(fs.readFileSync(filename));
-
-  // babel; inject global builtins/shims to entry functions
-  source = type === ModType.ENTRY ? injectBuiltinGlobals(source, { isEntry: true, ...opts }) : source;
-
   // babel; transpile to GAS
-  source = type !== ModType.BUILTIN ? gasTransforms(source, { isEntry: type === ModType.ENTRY, ...opts }) : source;
+  let source = gasTransforms({ isEntry: type === ModType.ENTRY, filename, ...opts });
 
-  // find require'd dependencies, excluding url's (with optional injection from requires[] param)
+  // babel; inject global builtins/shims to GAS entry functions
+  source = injectBuiltinGlobals({ isEntry: type === ModType.ENTRY, source, filename, ...opts });
+
+  // fnow ind require'd dependencies, excluding url's (with optional injection from requires[] param)
   requires = uniqArr(detective(source /*{ word: 'require' }*/).concat(requires));
   requires = requires.filter((dep) => !isUrl(dep));
+  requires = requires.filter((dep) => !isJson(dep));
 
   let newModule = xtend(GasModule, {
     basedir,

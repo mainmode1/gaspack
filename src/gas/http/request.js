@@ -1,46 +1,42 @@
-var inherits = require('inherits');
-var response = require('./response');
-var stream = require('readable-stream');
-var statusCodes = require('builtin-status-codes');
+const inherits = require('inherits');
+const stream = require('readable-stream');
+const statusCodes = require('builtin-status-codes');
 
 const urlFetch = require('../backoff').wrap(eval('UrlFetch' + 'App').fetch);
 
-var IncomingMessage = response.IncomingMessage;
-// var rStates = response.readyStates;
+const IncomingMessage = require('./response').IncomingMessage;
 
-var ClientRequest = (module.exports = function (opts) {
-  var self = this;
+const ClientRequest = (module.exports = function (opts) {
+  const self = this;
   stream.Writable.call(self);
 
   self._opts = opts;
+
+  self.destroyed = false;
+
   self._body = [];
   self._headers = {};
 
-  self._destroyed = false;
-
   if (opts.auth) self.setHeader('Authorization', 'Basic ' + Buffer.from(opts.auth).toString('base64'));
 
-  Object.keys(opts.headers).forEach(function (name) {
+  Object.keys(opts.headers).forEach((name) => {
     self.setHeader(name, opts.headers[name]);
   });
 
-  self.on('finish', function () {
+  self.on('finish', () => {
     self._onFinish();
   });
 
-  // console.log('http request:', opts);
+  return self;
 });
 
 inherits(ClientRequest, stream.Writable);
 
 ClientRequest.prototype.setHeader = function (name, value) {
-  var self = this;
-  var lowerName = name.toLowerCase();
+  const self = this;
+  const lowerName = name.toLowerCase();
 
-  // This check is not necessary, but it prevents warnings from browsers about setting unsafe
-  // headers. To be honest I'm not entirely sure hiding these warnings is a good thing, but
-  // http-browserify did it, so I will too.
-  if (unsafeHeaders.indexOf(lowerName) !== -1) return;
+  if (unsafeHeaders.includes(lowerName)) return;
 
   self._headers[lowerName] = {
     name: name,
@@ -49,96 +45,104 @@ ClientRequest.prototype.setHeader = function (name, value) {
 };
 
 ClientRequest.prototype.getHeader = function (name) {
-  var header = this._headers[name.toLowerCase()];
+  return this._headers[name.toLowerCase()];
+};
+
+ClientRequest.prototype.removeHeader = function (name) {
+  delete this._headers[name.toLowerCase()];
+};
+
+ClientRequest.prototype.getHeader = function (name) {
+  const header = this._headers[name.toLowerCase()];
   if (header) return header.value;
   return null;
 };
 
 ClientRequest.prototype.removeHeader = function (name) {
-  var self = this;
+  const self = this;
   delete self._headers[name.toLowerCase()];
 };
 
 ClientRequest.prototype._onFinish = function () {
-  var self = this;
-  if (self._destroyed) return;
-  var opts = self._opts;
+  const self = this;
+  if (self.destroyed) return;
+  const opts = self._opts;
 
-  var headersObj = self._headers;
-  var body = null;
+  const headersObj = self._headers;
+  let body = null;
 
   if (opts.method !== 'GET' && opts.method !== 'HEAD') {
     body = Buffer.concat(self._body);
     body = Utilities.newBlob(body, self.getHeader('content-type') || '');
   }
 
-  var urlFetchHeaders = {};
-  Object.keys(headersObj).forEach(function (keyName) {
-    var name = headersObj[keyName].name;
-    var value = headersObj[keyName].value;
+  const urlFetchHeaders = {};
+  Object.keys(headersObj).forEach((keyName) => {
+    const name = headersObj[keyName].name;
+    const value = headersObj[keyName].value;
     urlFetchHeaders[name] = value;
   });
 
   // https://developers.google.com/apps-script/reference/url-fetch/url-fetch-app
 
   const urlFetchOpts = {
-    method: self._opts.method,
+    method: opts.method,
     headers: urlFetchHeaders,
     payload: body || undefined,
     followRedirects: true, // default
     muteHttpExceptions: true,
   };
 
-  // console.log('http request: UrlFetchApp', self._opts.url, urlFetchOpts);
-  // console.log('http request: payload', body ? body.getDataAsString() : undefined);
+  const response = urlFetch(self._opts.url, urlFetchOpts);
 
-  let response = urlFetch(self._opts.url, urlFetchOpts);
-
-  let code = response.getResponseCode();
-
+  const code = response.getResponseCode();
   if (((code / 100) | 0) == 2) {
     self._fetchResponse = response;
     self._connect();
   } else {
-    if (!self._destroyed) self.emit('error', statusCodes[code]);
+    if (!self.destroyed) self.emit('error', statusCodes[code]);
   }
 };
 
 ClientRequest.prototype._connect = function () {
-  var self = this;
+  const self = this;
+  if (self.destroyed) return;
 
-  if (self._destroyed) return;
+  self._response = new IncomingMessage({ url: self._opts.url, fetchResponse: self._fetchResponse });
 
-  self._response = new IncomingMessage(self._opts.url, self._fetchResponse);
-  self._response.on('error', function (err) {
+  self._response.on('error', (err) => {
     self.emit('error', err);
   });
 
   self.emit('response', self._response);
 };
 
-ClientRequest.prototype._write = function (chunk, encoding, cb) {
-  var self = this;
-  // console.log('http request: write', chunk.toString());
-  self._body.push(chunk);
-  cb();
+ClientRequest.prototype._write = function (data, encoding, cb) {
+  const self = this;
+  if (typeof encoding === 'function') {
+    cb = encoding;
+    encoding = undefined;
+  }
+  self._body.push(Buffer.from(data, encoding));
+  if (typeof cb === 'function') cb();
 };
 
-ClientRequest.prototype.abort = ClientRequest.prototype.destroy = function () {
-  var self = this;
-  self._destroyed = true;
+ClientRequest.prototype.abort = ClientRequest.prototype.destroy = function (err) {
+  const self = this;
+  self.destroyed = true;
   if (self._response) self._response._destroyed = true;
+  if (err) self.emit('error', err);
+  return this;
 };
 
 ClientRequest.prototype.end = function (data, encoding, cb) {
-  var self = this;
-  // console.log('http request: end');
+  const self = this;
   if (typeof data === 'function') {
     cb = data;
     data = undefined;
   }
-
   stream.Writable.prototype.end.call(self, data, encoding, cb);
+  return this;
 };
 
 ClientRequest.prototype.flushHeaders = function () {};
@@ -147,7 +151,7 @@ ClientRequest.prototype.setNoDelay = function () {};
 ClientRequest.prototype.setSocketKeepAlive = function () {};
 
 // Taken from http://www.w3.org/TR/XMLHttpRequest/#the-setrequestheader%28%29-method
-var unsafeHeaders = [
+const unsafeHeaders = [
   'accept', // gaspack
   'user-agent', // gaspack
   'accept-charset',

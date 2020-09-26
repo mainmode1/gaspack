@@ -1,21 +1,28 @@
-(function (g) {
-  g.window = g.global = g;
+globalThis.window = globalThis.global = globalThis;
 
-  g.process = require('./process');
+globalThis.process = require('./process');
 
-  g.setTimeout = g.setInterval = function (fn, delay = 0) {
-    if ('function' !== typeof fn) throw Error('first parameter must be a function');
-    let args = Array.prototype.slice.call(arguments, 2);
-    Utilities.sleep(delay);
-    fn.apply(null, args);
-  };
-  g.clearTimeout = g.clearInterval = function () {};
+// synchronous polyfill
+globalThis.setTimeout = globalThis.setInterval = function setTimeout(fn, delay = 0) {
+  if ('function' !== typeof fn) throw TypeError(fn + 'is not a function');
+  let args = Array.prototype.slice.call(arguments, 2);
+  if (delay) Utilities.sleep(delay);
+  fn.apply(null, args);
+};
+globalThis.clearTimeout = globalThis.clearInterval = function () {};
 
-  require('setimmediate');
+// uses setTimeout(); can be tricked to use process.nextTick()
+require('setimmediate');
 
-  g.Promise = require('es6-promise').Promise;
-  g.Buffer = require('buffer').Buffer;
-  g['Buffer.isBuffer'] = require('is-buffer');
-  g.URL = require('./url').URL;
-  g.fetch = require('./fetch');
-})(globalThis);
+// TODO https://github.com/ysmood/yaku ???
+globalThis.Promise = require('es6-promise').Promise;
+// uses setTimeout(); can be tricked to use process.nextTick()
+// manually: Promise._setScheduler(setTimeout);
+// see https://github.com/stefanpenner/es6-promise/blob/f97e2666e6928745c450752e74213d2438b48b4c/lib/es6-promise/asap.js
+
+globalThis.Buffer = require('buffer').Buffer;
+globalThis['Buffer.isBuffer'] = require('is-buffer');
+
+globalThis.URL = require('./url').URL;
+
+globalThis.fetch = require('./fetch');

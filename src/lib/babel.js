@@ -1,8 +1,16 @@
+const fs = require('fs');
 const Buffer = require('safe-buffer').Buffer;
 const isBuffer = require('is-buffer');
-const babel = require('@babel/core');
 
-const { missing, xtend } = require('./helpers');
+const babel = require('@babel/core');
+const rewriteRequire = require('babel-plugin-rewrite-require');
+const modulesToCjs = require('@babel/plugin-transform-modules-commonjs');
+const asyncToPromises = require('babel-plugin-transform-async-to-promises');
+const inlineJsonImport = require('babel-plugin-inline-json-import');
+
+const dbgbabel = require('debug')('transform');
+
+const { cleanSrcBuf, missing, xtend } = require('./helpers');
 
 const defaultBabelOpts = {
   sourceType: 'module',
@@ -10,99 +18,102 @@ const defaultBabelOpts = {
   retainLines: true,
   auxiliaryCommentBefore: '',
   auxiliaryCommentAfter: '',
+  babelrc: false,
 };
 
-function injectBuiltinGlobals(
-  codeBuf = missing('code Buffer'),
-  { noBabel = false, noGlobals = false, isEntry = false } = {},
-) {
-  if (!isBuffer(codeBuf)) codeBuf = Buffer.from(codeBuf);
-  if (noBabel || noGlobals) return codeBuf;
-
-  function injectGlobalsPlugin() {
-    return {
-      visitor: {
-        Program(path) {
-          if (isEntry) return;
-          path.get('body').unshiftContainer('body', babel.template.ast(`require('globals');`));
-          path.skip();
-        },
-        FunctionDeclaration(path) {
-          if (!isEntry) return;
-          path.get('body').unshiftContainer('body', babel.template.ast(`require('gaspack');`));
-          // path.get('body').addComment('inner', 'gaspack inject global builtins/shims', false);
-          path.skip();
-        },
+function _injectGlobalsPlugin() {
+  return {
+    visitor: {
+      // Program(path) {
+      //   path.get('body').unshiftContainer('body', babel.template.ast(`require('globals');`));
+      //   path.skip();
+      // },
+      FunctionDeclaration(path) {
+        path.get('body').unshiftContainer('body', babel.template.ast(`require('gaspack');`));
+        // path.get('body').addComment('inner', '!gaspack', false);
+        path.skip();
       },
-    };
+    },
+  };
+}
+
+const defaultPlugins = [
+  [
+    modulesToCjs,
+    {
+      concise: false,
+      // https://babeljs.io/docs/en/babel-plugin-transform-modules-commonjs#via-node-api
+      loose: true,
+      strict: false,
+      noInterop: true,
+      // lazy: (string) => boolean,
+    },
+  ],
+  [
+    inlineJsonImport,
+    {
+      concise: false,
+      // https://github.com/yggie/babel-plugin-inline-json-import
+    },
+  ],
+  [
+    asyncToPromises,
+    {
+      concise: false,
+      // https://github.com/rpetrich/babel-plugin-transform-async-to-promises
+      inlineHelpers: true,
+      externalHelpers: false,
+      minify: true,
+      hoist: false,
+    },
+  ],
+  [
+    rewriteRequire,
+    {
+      concise: false,
+      aliases: {
+        // eg. stream: 'readable-stream',
+      },
+    },
+  ],
+];
+
+function gasTransforms({ noBabel = false, isEntry = false, source = '', filename = '' } = {}) {
+  const babelOpts = xtend(defaultBabelOpts, { sourceType: isEntry ? 'script' : 'module' }, { plugins: defaultPlugins });
+
+  if (source && source.length) {
+    if (!isBuffer(source)) source = Buffer.from(source);
+    if (noBabel) return source;
+
+    const transpiled = babel.transformSync(source.toString(), babelOpts);
+    dbgbabel('gasTransforms (source)', filename);
+    return Buffer.from(transpiled.code);
+  } else {
+    if (noBabel) return cleanSrcBuf(fs.readFileSync(filename));
+
+    const transpiled = babel.transformFileSync(
+      filename,
+      xtend(defaultBabelOpts, { sourceType: isEntry ? 'script' : 'module' }, { plugins: defaultPlugins }),
+    );
+    dbgbabel('gasTransforms (file)', filename);
+    return Buffer.from(transpiled.code);
   }
+}
+
+function injectBuiltinGlobals({ noGlobals = false, isEntry = false, source = missing('source'), filename = '' } = {}) {
+  if (!isBuffer(source)) source = Buffer.from(source);
+  if (noGlobals || !isEntry) return source;
 
   const transpiled = babel.transformSync(
-    codeBuf.toString(),
+    source.toString(),
     xtend(
       defaultBabelOpts,
-      { sourceType: isEntry ? 'script' : 'module' /*, auxiliaryCommentBefore: 'gaspack'*/ },
-      {
-        plugins: [[injectGlobalsPlugin, { concise: false }]],
-      },
+      { sourceType: isEntry ? 'script' : 'module' /*, auxiliaryCommentBefore: '!gaspack'*/ },
+      { plugins: [[_injectGlobalsPlugin, { concise: false }]] },
     ),
   );
-
+  dbgbabel('injectBuiltinGlobals', filename);
   return Buffer.from(transpiled.code);
 }
 
-function gasTransforms(codeBuf = missing('code Buffer'), { noBabel = false, isEntry = false } = {}) {
-  if (!isBuffer(codeBuf)) codeBuf = Buffer.from(codeBuf);
-  if (noBabel) return codeBuf;
-
-  const transpiled = babel.transformSync(
-    codeBuf.toString(),
-    xtend(
-      defaultBabelOpts,
-      { sourceType: isEntry ? 'script' : 'module' },
-      {
-        plugins: [
-          [
-            require.resolve('babel-plugin-rewrite-require'),
-            {
-              strictMode: !isEntry,
-              concise: false,
-              aliases: {
-                // for example:
-                // stream: 'readable-stream',
-              },
-            },
-          ],
-          [
-            require.resolve('@babel/plugin-transform-modules-commonjs'),
-            {
-              strictMode: !isEntry,
-              concise: false,
-              // https://babeljs.io/docs/en/babel-plugin-transform-modules-commonjs#via-node-api
-              loose: true,
-              strict: false,
-              noInterop: true,
-              // lazy: (string) => boolean,
-            },
-          ],
-          [
-            require.resolve('babel-plugin-transform-async-to-promises'),
-            {
-              strictMode: !isEntry,
-              concise: false,
-              // https://github.com/rpetrich/babel-plugin-transform-async-to-promises
-              inlineHelpers: true,
-              externalHelpers: false,
-              minify: true,
-              hoist: false,
-            },
-          ],
-        ],
-      },
-    ),
-  );
-
-  return Buffer.from(transpiled.code);
-}
-
-module.exports = { injectBuiltinGlobals, gasTransforms };
+module.exports = { gasTransforms, injectBuiltinGlobals };

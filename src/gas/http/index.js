@@ -1,49 +1,28 @@
-// adapted from: https://github.com/jhiesey/stream-http
+// adapted from: https://github.com/jhiesey/stream-http & https://github.com/rill-js/http
 
-var ClientRequest = require('./request');
-var response = require('./response');
-var statusCodes = require('builtin-status-codes');
-var url = require('url');
+const statusCodes = require('builtin-status-codes');
 
-var http = exports;
+const client = require('./client');
+const server = require('./server');
 
-http.request = function (opts, cb) {
-  if (typeof opts === 'string') opts = url.parse(opts);
+const http = (module.exports = {});
 
-  var protocol = opts.protocol || 'http:';
-  var host = opts.hostname || opts.host;
-  var port = opts.port;
-  var path = opts.path || '/';
+http.IncomingMessage = require('./response').IncomingMessage;
 
-  // Necessary for IPv6 addresses
-  if (host && host.indexOf(':') !== -1) host = '[' + host + ']';
-
-  // This may be a relative url. The browser should always be able to interpret it correctly.
-  opts.url = (host ? protocol + '//' + host : '') + (port ? ':' + port : '') + path;
-
-  opts.method = (opts.method || 'GET').toUpperCase();
-  opts.headers = opts.headers || {};
-
-  var req = new ClientRequest(opts);
-
-  if (cb) req.on('response', cb);
-
-  return req;
-};
-
-http.get = function get(opts, cb) {
-  var req = http.request(opts, cb);
-  req.end();
-  return req;
-};
-
-http.ClientRequest = ClientRequest;
-http.IncomingMessage = response.IncomingMessage;
+http.request = client.request;
+http.get = client.get;
+http.ClientRequest = client.ClientRequest;
 
 http.Agent = function () {};
 http.Agent.defaultMaxSockets = 4;
-
 http.globalAgent = new http.Agent();
+
+http.Server = server.Server;
+http.ServerResponse = server.ServerResponse;
+http.createServer = server.create;
+
+// custom GAS functions for handling doGet()/doPost() events
+http.serverRequest = server.request;
 
 http.STATUS_CODES = statusCodes;
 

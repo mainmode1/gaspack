@@ -1,6 +1,10 @@
-// shim for using process in GAS; adapted from https://github.com/defunctzombie/node-process/blob/master/browser.js
+// shim for using process in GAS
+// adapted from https://github.com/defunctzombie/node-process/blob/master/browser.js
 
-var process = (module.exports = {});
+const process = (module.exports = {});
+
+// trick polyfills to use process.nextTick()
+// process[Symbol.toStringTag] = 'process';
 
 // cached from whatever global is present so that test runners that stub it
 // don't break things.  But we need to wrap it in a try catch in case it is
@@ -11,10 +15,10 @@ var cachedSetTimeout;
 var cachedClearTimeout;
 
 function defaultSetTimeout() {
-  throw Error('setTimeout has not been defined');
+  throw new Error('setTimeout has not been defined');
 }
 function defaultClearTimeout() {
-  throw Error('clearTimeout has not been defined');
+  throw new Error('clearTimeout has not been defined');
 }
 (function () {
   try {
@@ -127,8 +131,18 @@ function drainQueue() {
   runClearTimeout(timeout);
 }
 
-// trick setImmediate polyfill
-process[Symbol.toStringTag] = 'process';
+process.nextTick = function (fun) {
+  var args = new Array(arguments.length - 1);
+  if (arguments.length > 1) {
+    for (var i = 1; i < arguments.length; i++) {
+      args[i - 1] = arguments[i];
+    }
+  }
+  queue.push(new Item(fun, args));
+  if (queue.length === 1 && !draining) {
+    runTimeout(drainQueue);
+  }
+};
 
 // v8 likes predictible objects
 function Item(fun, array) {
@@ -139,16 +153,7 @@ Item.prototype.run = function () {
   this.fun.apply(null, this.array);
 };
 
-process.nextTick = function (fun) {
-  var args = Array.prototype.slice.call(arguments);
-  args.shift();
-  queue.push(new Item(fun, args));
-  if (queue.length === 1 && !draining) {
-    runTimeout(drainQueue);
-  }
-};
-
-process.platform = process.arch = process.execPath = process.title = 'GAS';
+process.platform = process.arch = process.execPath = process.title = 'gas';
 process.pid = 1;
 process.browser = false;
 process.env = {};
@@ -157,22 +162,9 @@ process.version = ''; // empty string to avoid regexp issues
 process.versions = {};
 process.features = {};
 
-process.platform = function () {
-  return 'gas';
-};
-
 function noop() {}
 
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-process.prependListener = noop;
-process.prependOnceListener = noop;
-
+process.on = process.addListener = process.once = process.off = process.removeListener = process.removeAllListeners = process.emit = process.prependListener = process.prependOnceListener = noop;
 process.listeners = function (/*name*/) {
   return [];
 };
@@ -181,27 +173,26 @@ process.binding = function (/*name*/) {
   throw Error('process.binding is not supported');
 };
 
-// process.binding = function () {
-//   return {
-//     hasTracing: false,
-//   };
-// };
+(function () {
+  let cwd = require('../gas/fs/gdrive').cwd();
+  let path;
+  process.cwd = function () {
+    return cwd;
+  };
+  process.chdir = function (dir) {
+    if (!path) path = require('path');
+    cwd = path.resolve(dir, cwd);
+  };
+})();
 
-process.cwd = function () {
-  return require('../gas/fs/gdrive').cwd();
-};
-process.chdir = function (/*dir*/) {
-  throw Error('process.chdir is not supported');
-};
 process.umask = function () {
   return 0;
 };
 
 process.exit = process.kill = process.dlopen = process.uptime = process.memoryUsage = process.uvCounters = noop;
 
-const has = (o, p) => Object.prototype.hasOwnProperty.call(o, p);
 process.stack = (e) => {
-  if (e && has(e, 'stack')) {
+  if (e && Object.prototype.hasOwnProperty.call(e, 'stack')) {
     return `${e.message} ${e.stack.split('\n').slice(1, -1).join(' ').replace(/\s\s+/g, ' ')}`;
   } else {
     try {

@@ -1,12 +1,12 @@
 function wrap(fn) {
-  if ('function' !== typeof fn) throw Error('first parameter must be a function');
+  if ('function' !== typeof fn) throw TypeError(fn + 'is not a function');
   return (...args) => expCall(fn, ...args);
 }
 
 function expCall(...args) {
   if (!args.length) return undefined;
   const fn = args.shift();
-  if ('function' !== typeof fn) throw Error('first parameter must be a function');
+  if ('function' !== typeof fn) throw TypeError(fn + 'is not a function');
   const wrapped = () => fn(...args);
   return expBackoff(wrapped).result;
 }
@@ -14,13 +14,13 @@ function expCall(...args) {
 function expProfile(...args) {
   if (!args.length) return undefined;
   const fn = args.shift();
-  if ('function' !== typeof fn) throw Error('first parameter must be a function');
+  if ('function' !== typeof fn) throw TypeError(fn + 'is not a function');
   const wrapped = () => fn(...args);
   return expBackoff(wrapped);
 }
 
 function expBackoff(fn, delay, retries, attempt, elapsed) {
-  if ('function' !== typeof fn) throw Error('first parameter must be a function');
+  if ('function' !== typeof fn) throw TypeError(fn + 'is not a function');
   delay = Math.abs(delay || 750);
   retries = Math.abs(retries || 5);
   attempt = Math.abs(attempt || 1);
@@ -42,7 +42,7 @@ function expBackoff(fn, delay, retries, attempt, elapsed) {
 }
 
 function profile(fn, name = '') {
-  if ('function' !== typeof fn) throw Error('first parameter must be a function');
+  if ('function' !== typeof fn) throw TypeError(fn + 'is not a function');
   return (...args) => {
     const timed = { name, start: new Date().getTime() };
     timed.result = fn(...args);
