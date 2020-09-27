@@ -5,7 +5,7 @@ const browserResolve = require('browser-resolve').sync;
 
 const builtins = require('../lib/builtins');
 const { create, ModType } = require('./module');
-const { missing } = require('./helpers');
+const { isEmpty, missing } = require('./helpers');
 
 function resolver(filename = missing('filename'), opts) {
   let { cache = {}, type = ModType.ENTRY, requires = [] } = opts;
@@ -20,6 +20,12 @@ function resolver(filename = missing('filename'), opts) {
 
   if (!opts.noRequireUrl && type === ModType.ENTRY) requires.push('require-url');
   const module = create(filename, { type, requires, ...opts });
+
+  if (!isEmpty(module.map)) {
+    dbgresolver('already traversed', module.gas.path, module.id);
+    return [module];
+  }
+
   modules.add(module);
 
   // handle recursive circular dependencies
@@ -44,16 +50,14 @@ function resolver(filename = missing('filename'), opts) {
       // recursively traverse dependency tree
       for (let depModule of resolver(resolved[dependency], { cache, ...opts })) {
         modules.add(depModule);
+        // dependency map for use by global require chain
+        module.map[dependency] = depModule.id;
       }
-
-      // dependency map for use by global require chain
-      module.map[dependency] = [...modules].find((m) => m.filename === resolved[dependency]).id;
     }
   }
 
   module.children = resolved;
-  dbgresolver(module.gas.path, module.type, module.id, modules.size, module.map);
-
+  dbgresolver('traversed', filename, '=>', module.gas.path, module.type, module.id, modules.size, module.map);
   return (cache[filename] = [...modules]);
 }
 

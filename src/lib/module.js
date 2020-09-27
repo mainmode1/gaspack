@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 const dbgmeta = require('debug')('module:meta'),
-  dbgcreate = require('debug')('module:create');
+  dbgcreate = require('debug')('module:create'),
+  dbgjson = require('debug')('module:json');
 
 const File = require('vinyl');
 const detective = require('detective');
@@ -34,7 +35,9 @@ const GasModule = {
   require: function () {},
 };
 
-function _gasProjFileMeta(filename, opts) {
+const moduleCache = new Map();
+
+function _meta(filename, opts) {
   let { basedir = '', type = ModType.APP, paths = [], gasPaths = {} } = opts;
 
   basedir = basedir || path.dirname(filename);
@@ -83,9 +86,15 @@ function create(filename = missing('filename'), opts) {
   filename = path.normalize(filename);
 
   let { requires = [], paths = [], parent = '' } = opts;
-  let { type, basedir, vpath, id } = _gasProjFileMeta(filename, opts);
-  let source = '';
+  let { type, basedir, vpath, id } = _meta(filename, opts);
 
+  if (moduleCache.has(id)) {
+    let cachedModule = moduleCache.get(id);
+    dbgcreate('dedupe module', cachedModule.gas.path, id);
+    return cachedModule;
+  }
+
+  let source = '';
   if (isJson(filename)) {
     source = sanitize(fs.readFileSync(filename, 'utf-8'));
     try {
@@ -97,7 +106,7 @@ function create(filename = missing('filename'), opts) {
       throw Error(err);
     }
     vpath = path.join(path.dirname(vpath), path.basename(vpath, path.extname(vpath)) + '.js');
-    dbgcreate('JSON to module', filename, vpath);
+    dbgjson('JSON to module', filename, vpath);
   } else {
     // babel; transpile to GAS
     source = gasTransforms({ isEntry: type === ModType.ENTRY, filename, ...opts });
@@ -123,7 +132,8 @@ function create(filename = missing('filename'), opts) {
     type,
   });
 
-  dbgcreate(newModule.filename);
+  dbgcreate('created', newModule.filename, '=>', newModule.gas.path, type, id);
+  moduleCache.set(id, newModule);
   return newModule;
 }
 

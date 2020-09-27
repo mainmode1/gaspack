@@ -20,13 +20,10 @@
   // uses setTimeout(); can be tricked to use process.nextTick()
   require('setimmediate');
 
-  // g.Promise = require('es6-promise').Promise;
+  g.Promise = require('es6-promise').Promise;
   // uses setTimeout(); can be tricked to use process.nextTick()
   // manually: Promise._setScheduler(setTimeout);
   // see https://github.com/stefanpenner/es6-promise/blob/f97e2666e6928745c450752e74213d2438b48b4c/lib/es6-promise/asap.js
-
-  // https://github.com/ysmood/yaku
-  g.Promise = require('yaku');
 
   g.Buffer = require('buffer').Buffer;
   g['Buffer.isBuffer'] = require('is-buffer');

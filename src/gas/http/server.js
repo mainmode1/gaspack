@@ -62,15 +62,15 @@ server.inject = function (server = missing('server'), url, opts = {}) {
       serverResponse.payload = serverResponse.rawPayload.toString();
 
       // new Response(...res.data) when paired with the fetch API
-      // serverResponse.data = {
-      //   body: Utilities.newBlob(serverResponse.rawPayload, serverResponse.getHeader('content-type') || ''),
-      //   res: {
-      //     headers: serverResponse.getHeaders(),
-      //     status: serverResponse.statusCode,
-      //     statusText: serverResponse.statusMessage,
-      //     url: incomingMessage.url,
-      //   },
-      // };
+      serverResponse.data = {
+        body: Utilities.newBlob(serverResponse.rawPayload, serverResponse.getHeader('content-type') || ''),
+        res: {
+          headers: serverResponse.getHeaders(),
+          status: serverResponse.statusCode,
+          statusText: serverResponse.statusMessage,
+          url: incomingMessage.url,
+        },
+      };
 
       return resolve(serverResponse);
     });
@@ -80,6 +80,17 @@ server.inject = function (server = missing('server'), url, opts = {}) {
 };
 
 // https://developers.google.com/apps-script/guides/web#request_parameters
+
+// const options = {
+//   hostname: 'localhost',
+//   path: '/test2', // should include query string if any
+//   method: 'POST',
+//   headers: {
+//     'Content-Type': 'application/x-www-form-urlencoded',
+//     'Content-Length': Buffer.byteLength(postData),
+//   },
+//   data: postData,
+// };
 
 // e.queryString name=alice&n=1&n=2
 // e.pathInfo
