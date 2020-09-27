@@ -46,7 +46,8 @@
     "url-search-params-polyfill": "^8.1.0",
     "util": "^0.12.3",
     "vinyl": "^2.2.0",
-    "vinyl-fs": "^3.0.3"
+    "vinyl-fs": "^3.0.3",
+    "yaku": "^1.0.1"
   },
   "description": "CommonJS and ES modules for Google Apps Script with optional NodeJS-ish shims.",
   "devDependencies": {
