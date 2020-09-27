@@ -34,7 +34,7 @@ e.isChildPath = /*prettier-ignore*/ (parent='',child='')=>{if(!parent||!child)re
 e.isString = (s) => s && (typeof s === 'string' || s instanceof String);
 e.isUrl = (url = '') => /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/gi.test(url);
 e.isBase64 = (v = '') => /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(v);
-e.isJson = (filename = '') => /(\w*)\.json$/gi.test(filename);
+e.isJson = (filename = '') => /\.json$/.test(filename);
 
 // http://isthe.com/chongo/tech/comp/fnv/
 e.fnv32a = /*prettier-ignore*/ (str='')=>{if(!str)return'';let t=2166136261;for(let r=0,e=str.length;r<e;r++)t^=str.charCodeAt(r),t+=(t<<1)+(t<<4)+(t<<7)+(t<<8)+(t<<24);return('0000000'+(t>>>0).toString(16)).substr(-8)};

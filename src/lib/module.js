@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 
 const dbgmeta = require('debug')('module:meta'),
@@ -5,6 +6,7 @@ const dbgmeta = require('debug')('module:meta'),
 
 const File = require('vinyl');
 const detective = require('detective');
+const sanitize = require('htmlescape').sanitize;
 
 const { gasTransforms, injectBuiltinGlobals } = require('./babel');
 const { fnv32a, isChildPath, isJson, isUrl, makeEnum, missing, uniqArr, xtend } = require('./helpers');
@@ -81,19 +83,32 @@ function create(filename = missing('filename'), opts) {
   filename = path.normalize(filename);
 
   let { requires = [], paths = [], parent = '' } = opts;
-
   let { type, basedir, vpath, id } = _gasProjFileMeta(filename, opts);
+  let source = '';
 
-  // babel; transpile to GAS
-  let source = gasTransforms({ isEntry: type === ModType.ENTRY, filename, ...opts });
+  if (isJson(filename)) {
+    source = sanitize(fs.readFileSync(filename, 'utf-8'));
+    try {
+      // check json validity
+      JSON.parse(source);
+      source = Buffer.from('module.exports=' + source);
+    } catch (err) {
+      err.message = 'while parsing ' + filename + ': ' + err.message;
+      throw Error(err);
+    }
+    vpath = path.join(path.dirname(vpath), path.basename(vpath, path.extname(vpath)) + '.js');
+    dbgcreate('JSON to module', filename, vpath);
+  } else {
+    // babel; transpile to GAS
+    source = gasTransforms({ isEntry: type === ModType.ENTRY, filename, ...opts });
 
-  // babel; inject global builtins/shims to GAS entry functions
-  source = injectBuiltinGlobals({ isEntry: type === ModType.ENTRY, source, filename, ...opts });
+    // babel; inject global builtins/shims to GAS entry functions
+    source = injectBuiltinGlobals({ isEntry: type === ModType.ENTRY, source, filename, ...opts });
 
-  // fnow ind require'd dependencies, excluding url's (with optional injection from requires[] param)
-  requires = uniqArr(detective(source /*{ word: 'require' }*/).concat(requires));
-  requires = requires.filter((dep) => !isUrl(dep));
-  requires = requires.filter((dep) => !isJson(dep));
+    // fnow ind require'd dependencies, excluding url's (with optional injection from requires[] param)
+    requires = uniqArr(detective(source /*{ word: 'require' }*/).concat(requires));
+    requires = requires.filter((dep) => !isUrl(dep));
+  }
 
   let newModule = xtend(GasModule, {
     basedir,

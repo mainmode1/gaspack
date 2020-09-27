@@ -6,7 +6,6 @@ const babel = require('@babel/core');
 const rewriteRequire = require('babel-plugin-rewrite-require');
 const modulesToCjs = require('@babel/plugin-transform-modules-commonjs');
 const asyncToPromises = require('babel-plugin-transform-async-to-promises');
-const inlineJsonImport = require('babel-plugin-inline-json-import');
 
 const dbgbabel = require('debug')('transform');
 
@@ -19,6 +18,7 @@ const defaultBabelOpts = {
   auxiliaryCommentBefore: '',
   auxiliaryCommentAfter: '',
   babelrc: false,
+  configFile: false,
 };
 
 function _injectGlobalsPlugin() {
@@ -47,13 +47,6 @@ const defaultPlugins = [
       strict: false,
       noInterop: true,
       // lazy: (string) => boolean,
-    },
-  ],
-  [
-    inlineJsonImport,
-    {
-      concise: false,
-      // https://github.com/yggie/babel-plugin-inline-json-import
     },
   ],
   [

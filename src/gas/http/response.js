@@ -8,7 +8,7 @@ const IncomingMessage = (exports.IncomingMessage = function (opts) {
 
   self._opts = opts;
 
-  self.socket = self.connection = undefined;
+  self.socket = self.connection = null;
 
   self._destroyed = false;
   self.aborted = false;
@@ -84,12 +84,15 @@ IncomingMessage.prototype._handleGasServerRequest = function () {
     self.rawHeaders.push(key, header);
   }
 
-  try {
-    if (typeof request.body === 'object') request.body = JSON.stringify(request.body);
-    self.push(Buffer.from(request.body));
-    self.push(null);
-  } catch (err) {
-    if (!self._destroyed) self.emit('error', err);
+  if (request.body) {
+    try {
+      if (typeof request.body !== 'string' || !(request.body instanceof String))
+        request.body = JSON.stringify(request.body);
+      self.push(Buffer.from(request.body));
+      self.push(null);
+    } catch (err) {
+      if (!self._destroyed) self.emit('error', err);
+    }
   }
 };
 

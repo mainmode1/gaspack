@@ -2,7 +2,7 @@ globalThis.window = globalThis.global = globalThis;
 
 globalThis.process = require('./process');
 
-// synchronous polyfill
+// synchronous GAS polyfill
 globalThis.setTimeout = globalThis.setInterval = function setTimeout(fn, delay = 0) {
   if ('function' !== typeof fn) throw TypeError(fn + 'is not a function');
   let args = Array.prototype.slice.call(arguments, 2);

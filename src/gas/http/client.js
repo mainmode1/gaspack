@@ -3,30 +3,27 @@
 const parseUrl = require('url').parse;
 
 const ClientRequest = require('./request');
+const urlToOpts = require('./util').urlToHttpRequestOpts;
 
 const client = (module.exports = {});
 
 // https://nodejs.org/api/http.html#http_http_request_options_callback
-client.request = function (url, opts, cb) {
-  if (typeof url === 'string') {
+client.request = function (url, opts = {}, cb) {
+  if (url && typeof url === 'string') {
     if (typeof opts === 'function') {
       cb = opts;
       opts = {};
     }
-    opts.parsed = parseUrl(url);
+    opts = Object.assign(opts, urlToOpts(parseUrl(url)));
   } else if (typeof opts === 'function') {
     cb = opts;
     opts = url || {};
   }
-  opts.parsed = opts.parsed || {};
 
-  const protocol = opts.protocol || opts.parsed.protocol || 'http:';
-  const port = opts.port || opts.parsed.port || opts.defaultPort; // || protocol === 'https:' ? 443 : 80;
-  const path = opts.path || opts.parsed.path || '/';
-  const host = opts.hostname || opts.parsed.hostname || opts.host; // || 'localhost';
-
-  // IPv6
-  // if (host && ~host.indexOf(':')) host = '[' + host + ']';
+  const protocol = opts.protocol || 'http:';
+  const port = opts.port || opts.defaultPort; // || protocol === 'https:' ? 443 : 80;
+  const path = opts.path || '/';
+  const host = opts.hostname || opts.host; // || 'localhost';
 
   // may be relative url
   opts.url = (host ? protocol + '//' + host : '') + (port ? ':' + port : '') + path;

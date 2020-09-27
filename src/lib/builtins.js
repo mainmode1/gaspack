@@ -5,14 +5,13 @@ exports.assert = require.resolve('assert/');
 exports.backoff = require.resolve('../gas/backoff');
 exports.buffer = require.resolve('buffer/');
 exports.constants = require.resolve('../gas/constants');
-// exports.crypto = require.resolve('crypto-browserify'); // TODO
-exports.crypto = require.resolve('../gas/_empty.js');
+exports.crypto = require.resolve('crypto-browserify');
 exports.domain = require.resolve('domain-browser');
 exports.encoding = require.resolve('encoding');
 exports.events = require.resolve('events/');
 exports.fs = require.resolve('../gas/fs');
 exports.gaspack = require.resolve('../gas/gaspack');
-exports.http = require.resolve('../gas/http'); // TODO: http2
+exports.http = require.resolve('../gas/http');
 exports.https = require.resolve('https-browserify');
 exports.path = require.resolve('path-browserify');
 exports.punycode = require.resolve('punycode/');
@@ -25,16 +24,16 @@ exports.tty = require.resolve('tty-browserify');
 exports.url = require.resolve('../gas/url');
 exports.util = require.resolve('util/util.js');
 exports.vm = require.resolve('../gas/vm');
-// exports.zlib = require.resolve('browserify-zlib'); // TODO: works but huge ... implement GAS native
-exports.zlib = require.resolve('../gas/_empty.js');
+exports.zlib = require.resolve('browserify-zlib'); // TODO: works but huge ... implement GAS native instead of pako?
 exports['readable-stream'] = require.resolve('readable-stream/readable-browser.js');
 exports['require-url'] = require.resolve('../gas/require-url');
 
-// noops
+// not implemented
 exports.child_process = require.resolve('../gas/_empty.js');
 exports.cluster = require.resolve('../gas/_empty.js');
 exports.dgram = require.resolve('../gas/_empty.js');
 exports.dns = require.resolve('../gas/_empty.js');
+exports.http2 = require.resolve('../gas/_empty.js');
 exports.inspector = require.resolve('../gas/_empty.js');
 exports.module = require.resolve('../gas/_empty.js');
 exports.net = require.resolve('../gas/_empty.js');

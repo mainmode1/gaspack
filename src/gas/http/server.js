@@ -4,6 +4,7 @@ const http = require('@rill/http');
 const parseUrl = require('url').parse;
 
 const IncomingMessage = require('./response').IncomingMessage;
+const urlToOpts = require('./util').urlToHttpRequestOpts;
 
 const missing = /*prettier-ignore*/ r=>{throw Error(`${r} parameter required`)};
 
@@ -21,63 +22,61 @@ server.create = function (opts, requestListener) {
   return http.createServer({}, requestListener);
 };
 
-server.request = function (server = missing('server'), url, opts) {
-  if (typeof url === 'string') {
-    (opts = opts || {}), (opts.parsed = parseUrl(url));
-  } else {
-    opts = url || {};
-  }
-  opts.parsed = opts.parsed || {};
+server.inject = function (server = missing('server'), url, opts = {}) {
+    opts = typeof url === 'string' ? Object.assign(opts, urlToOpts(parseUrl(url))) : url || {};
 
-  const protocol = opts.protocol || opts.parsed.protocol || 'http:';
-  const port = opts.port || opts.parsed.port || opts.defaultPort; // || protocol === 'https:' ? 443 : 80;
-  const path = opts.path || opts.parsed.path || '/';
-  const host = opts.hostname || opts.parsed.hostname || opts.host; // || 'localhost';
+    const protocol = opts.protocol || 'http:';
+    const port = opts.port || opts.defaultPort; // || protocol === 'https:' ? 443 : 80;
+    const path = opts.path || '/';
+    const host = opts.hostname || opts.host; // || 'localhost';
 
-  // may be relative url
-  opts.url = (host ? protocol + '//' + host : '') + (port ? ':' + port : '') + path;
+    // may be relative url
+    opts.url = (host ? protocol + '//' + host : '') + (port ? ':' + port : '') + path;
 
-  opts.method = (opts.method || 'GET').toUpperCase();
-  opts.headers = opts.headers || {};
+    opts.method = (opts.method || 'GET').toUpperCase();
+    opts.headers = opts.headers || {};
 
-  return new Promise((resolve) => {
-    const incomingMessage = new IncomingMessage({
-      url: path,
-      serverRequest: {
-        // encrypted: protocol === 'https:',
-        // remoteAddress: '',
-        server,
-        method: opts.method,
-        headers: opts.headers,
-        body: opts.data || opts.body,
-      },
+    return new Promise((resolve) => {
+      const incomingMessage = new IncomingMessage({
+        url: path,
+        serverRequest: {
+          // encrypted: protocol === 'https:',
+          // remoteAddress: '',
+          method: opts.method,
+          headers: opts.headers,
+          body: opts.data || opts.body,
+          server,
+        },
+      });
+
+      const serverResponse = new http.ServerResponse(incomingMessage);
+
+      serverResponse.once('finish', () => {
+        incomingMessage.complete = true;
+        incomingMessage.emit('end');
+
+        serverResponse.rawPayload =
+          serverResponse._body && serverResponse._body.length
+            ? Buffer.concat(serverResponse._body.map((chunk) => Buffer.from(chunk)))
+            : Buffer.from('');
+        serverResponse.payload = serverResponse.rawPayload.toString();
+
+        // new Response(...res.data) when paired with the fetch API
+        // serverResponse.data = {
+        //   body: Utilities.newBlob(serverResponse.rawPayload, serverResponse.getHeader('content-type') || ''),
+        //   res: {
+        //     headers: serverResponse.getHeaders(),
+        //     status: serverResponse.statusCode,
+        //     statusText: serverResponse.statusMessage,
+        //     url: incomingMessage.url,
+        //   },
+        // };
+
+        return resolve(serverResponse);
+      });
+
+      setTimeout(server.emit.bind(server, 'request', incomingMessage, serverResponse), 0);
     });
-
-    const serverResponse = new http.ServerResponse(incomingMessage);
-
-    serverResponse.once('finish', () => {
-      incomingMessage.complete = true;
-      incomingMessage.emit('end');
-
-      serverResponse.rawPayload = Buffer.concat(serverResponse._body.map((chunk) => Buffer.from(chunk)));
-      serverResponse.payload = serverResponse.rawPayload.toString();
-
-      // new Response(...res.data) when paired with the fetch API
-      // serverResponse.data = {
-      //   body: Utilities.newBlob(serverResponse.rawPayload, serverResponse.getHeader('content-type') || ''),
-      //   res: {
-      //     headers: serverResponse.getHeaders(),
-      //     status: serverResponse.statusCode,
-      //     statusText: serverResponse.statusMessage,
-      //     url: incomingMessage.url,
-      //   },
-      // };
-
-      return resolve(serverResponse);
-    });
-
-    setTimeout(server.emit.bind(server, 'request', incomingMessage, serverResponse), 0);
-  });
 };
 
 // https://developers.google.com/apps-script/guides/web#request_parameters

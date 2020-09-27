@@ -21,8 +21,8 @@ http.Server = server.Server;
 http.ServerResponse = server.ServerResponse;
 http.createServer = server.create;
 
-// custom GAS functions for handling doGet()/doPost() events
-http.serverRequest = server.request;
+// custom GAS functions for request injection & handling doGet()/doPost() events
+http.serverInject = server.inject;
 
 http.STATUS_CODES = statusCodes;
 
