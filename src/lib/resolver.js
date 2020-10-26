@@ -1,3 +1,5 @@
+const path = require('path');
+
 const dbgresolver = require('debug')('resolver');
 
 // const nodeResolve = require('resolve').sync;
@@ -15,7 +17,7 @@ function resolver(filename = missing('filename'), opts) {
     return cache[filename];
   }
 
-  const modules = new Set(),
+  const tree = new Set(),
     resolved = {};
 
   if (!opts.noRequireUrl && type === ModType.ENTRY) requires.push('require-url');
@@ -26,13 +28,13 @@ function resolver(filename = missing('filename'), opts) {
     return [module];
   }
 
-  modules.add(module);
+  tree.add(module);
 
   // handle recursive circular dependencies
-  cache[filename] = [...modules];
+  cache[filename] = [...tree];
 
   if (module.requires.length) {
-    dbgresolver('traversing', module.filename, 'dependencies:', module.requires);
+    dbgresolver('traversing', module.filename, 'dependencies', module.requires);
     for (let dependency of module.requires) {
       opts.parent = module.filename;
 
@@ -47,18 +49,25 @@ function resolver(filename = missing('filename'), opts) {
       }
       dbgresolver('resolved', dependency, '=>', resolved[dependency]);
 
-      // recursively traverse dependency tree
-      for (let depModule of resolver(resolved[dependency], { cache, ...opts })) {
-        modules.add(depModule);
-        // dependency map for use by global require chain
+      // recursively traverse dependency tree & create module dependency map for global require chain
+      const depTree = resolver(resolved[dependency], { cache, ...opts });
+      if (depTree.length === 1) {
+        // already traversed
+        let depModule = depTree[0];
+        tree.add(depModule);
         module.map[dependency] = depModule.id;
+      } else {
+        for (let depModule of depTree) {
+          tree.add(depModule);
+        }
+        module.map[dependency] = [...tree].find((m) => m.filename === resolved[dependency]).id;
       }
     }
   }
 
   module.children = resolved;
-  dbgresolver('traversed', filename, '=>', module.gas.path, module.type, module.id, modules.size, module.map);
-  return (cache[filename] = [...modules]);
+  dbgresolver('traversed', path.relative(process.cwd(), filename), 'tree size', tree.size, 'map', module.map);
+  return (cache[filename] = [...tree]);
 }
 
 module.exports = resolver;

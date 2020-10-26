@@ -1,17 +1,20 @@
+// adapted from: https://github.com/jhiesey/stream-http
+
 const inherits = require('inherits');
 const stream = require('readable-stream');
 const statusCodes = require('builtin-status-codes');
 
 const urlFetch = require('../backoff').wrap(eval('UrlFetch' + 'App').fetch);
 
-const IncomingMessage = require('./response').IncomingMessage;
+const IncomingMessage = require('./message').IncomingMessage;
 
 const ClientRequest = (module.exports = function (opts) {
   const self = this;
   stream.Writable.call(self);
 
-  self._opts = opts;
+  self._opts = opts || {};
 
+  self.socket = null;
   self.destroyed = false;
 
   self._body = [];
@@ -127,7 +130,7 @@ ClientRequest.prototype._write = function (data, encoding, cb) {
   if (typeof cb === 'function') cb();
 };
 
-ClientRequest.prototype.abort = ClientRequest.prototype.destroy = function (err) {
+ClientRequest.prototype.destroy = function (err) {
   const self = this;
   self.destroyed = true;
   if (self._response) self._response._destroyed = true;

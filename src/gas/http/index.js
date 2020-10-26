@@ -7,7 +7,7 @@ const server = require('./server');
 
 const http = (module.exports = {});
 
-http.IncomingMessage = require('./response').IncomingMessage;
+http.IncomingMessage = require('./message').IncomingMessage;
 
 http.request = client.request;
 http.get = client.get;

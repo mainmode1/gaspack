@@ -1,8 +1,6 @@
-// adapted from: https://github.com/jhiesey/stream-http
-
 const parseUrl = require('url').parse;
 
-const ClientRequest = require('./request');
+const ClientRequest = require('./client-request');
 const urlToOpts = require('./util').urlToHttpRequestOpts;
 
 const client = (module.exports = {});

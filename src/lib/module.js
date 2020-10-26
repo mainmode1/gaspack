@@ -132,7 +132,16 @@ function create(filename = missing('filename'), opts) {
     type,
   });
 
-  dbgcreate('created', newModule.filename, '=>', newModule.gas.path, type, id);
+  dbgcreate(
+    'created',
+    newModule.gas.path,
+    type,
+    id,
+    'from',
+    path.relative(process.cwd(), newModule.filename),
+    'parent',
+    path.relative(process.cwd(), parent),
+  );
   moduleCache.set(id, newModule);
   return newModule;
 }

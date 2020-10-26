@@ -1,9 +1,9 @@
-// adapted from: https://github.com/rill-js/http
-
+// see: https://github.com/rill-js/http
 const http = require('@rill/http');
+const stream = require('readable-stream');
 const parseUrl = require('url').parse;
 
-const IncomingMessage = require('./response').IncomingMessage;
+const IncomingMessage = require('./message').IncomingMessage;
 const urlToOpts = require('./util').urlToHttpRequestOpts;
 
 const missing = /*prettier-ignore*/ r=>{throw Error(`${r} parameter required`)};
@@ -14,12 +14,38 @@ server.Server = http.Server;
 server.IncomingMessage = http.IncomingMessage;
 server.ServerResponse = http.ServerResponse;
 
-server.ServerResponse.prototype.assignSocket = function () {};
+const _nullSocket = function () {
+  return new stream.Writable({
+    write(chunk, encoding, callback) {
+      setImmediate(callback);
+    },
+  });
+};
+
+server.ServerResponse.prototype.assignSocket = () => _nullSocket();
 server.ServerResponse.prototype._header = '';
 
 server.create = function (opts, requestListener) {
   if (typeof opts === 'function') requestListener = opts;
   return http.createServer({}, requestListener);
+};
+
+let start = null;
+const _debugEvents = (emitter, type) => {
+  const oldEmit = emitter.emit,
+    end = Date.now(),
+    diff = start === null ? 0 : end - start;
+  start = end;
+  emitter.emit = function (...args) {
+    console.log(
+      type || emitter.constructor.name,
+      'listeners',
+      emitter.listenerCount(args[0]),
+      Buffer.isBuffer(args[1]) ? [args[0], args[1].toString()] : args,
+      `+${diff}ms`,
+    );
+    oldEmit.apply(emitter, arguments);
+  };
 };
 
 server.inject = function (server = missing('server'), url, opts = {}) {
@@ -36,46 +62,66 @@ server.inject = function (server = missing('server'), url, opts = {}) {
   opts.method = (opts.method || 'GET').toUpperCase();
   opts.headers = opts.headers || {};
 
-  return new Promise((resolve) => {
-    const incomingMessage = new IncomingMessage({
+  // node default
+  opts.headers['Transfer-Encoding'] = 'chunked';
+
+  return new Promise((resolve, reject) => {
+    const request = new IncomingMessage({
       url: path,
-      serverRequest: {
-        // encrypted: protocol === 'https:',
-        // remoteAddress: '',
+      serverInjectRequest: {
+        encrypted: protocol === 'https:',
+        remoteAddress: '',
         method: opts.method,
         headers: opts.headers,
-        body: opts.data || opts.body,
+        payload: opts.payload || opts.data || opts.body,
         server,
       },
     });
+    if (opts.debugEvents) _debugEvents(request, 'ServerRequest');
+    request.on('error', (err) => reject(err));
 
-    const serverResponse = new http.ServerResponse(incomingMessage);
+    const response = new http.ServerResponse(request);
+    if (opts.debugEvents) _debugEvents(response, 'ServerResponse');
+    response.on('error', (err) => reject(err));
 
-    serverResponse.once('finish', () => {
-      incomingMessage.complete = true;
-      incomingMessage.emit('end');
+    if (!opts.middleware) {
+      request.on('data', (chunk) => {
+        request.body = chunk.toString();
+      });
+    }
 
-      serverResponse.rawPayload =
-        serverResponse._body && serverResponse._body.length
-          ? Buffer.concat(serverResponse._body.map((chunk) => Buffer.from(chunk)))
+    response.once('finish', () => {
+      // autoclose request
+      process.nextTick(() => request.emit('close'));
+
+      // raw payload as a Buffer
+      response.rawPayload = response.rawData =
+        response._body && response._body.length
+          ? Buffer.concat(response._body.map((chunk) => Buffer.from(chunk)))
           : Buffer.from('');
-      serverResponse.payload = serverResponse.rawPayload.toString();
+
+      // payload as a UTF-8 encoded string
+      response.payload = response.rawPayload.toString();
 
       // new Response(...res.data) when paired with the fetch API
-      serverResponse.data = {
-        body: Utilities.newBlob(serverResponse.rawPayload, serverResponse.getHeader('content-type') || ''),
+      response.data = {
+        body: Utilities.newBlob(response.rawPayload, response.getHeader('content-type') || ''),
         res: {
-          headers: serverResponse.getHeaders(),
-          status: serverResponse.statusCode,
-          statusText: serverResponse.statusMessage,
-          url: incomingMessage.url,
+          headers: response.getHeaders(),
+          status: response.statusCode,
+          statusText: response.statusMessage,
+          url: request.url,
         },
       };
 
-      return resolve(serverResponse);
+      return resolve(response);
     });
 
-    setTimeout(server.emit.bind(server, 'request', incomingMessage, serverResponse), 0);
+    server.emit('request', request, response);
+
+    // server requests from inject, ie. IncomingMessage stream, are paused to allow middleware listeners to fire
+    // ... because sync
+    if (request.isPaused()) request.resume();
   });
 };
 
