@@ -96,10 +96,9 @@ IncomingMessage.prototype._handleServer = function (request) {
         ).toString();
       }
 
+      self.complete = true;
       self.push(payload);
     }
-
-    self.complete = true;
   } catch (err) {
     if (!self._destroyed) self.emit('error', err);
   }

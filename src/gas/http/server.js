@@ -65,6 +65,8 @@ server.inject = function (server = missing('server'), url, opts = {}) {
   // node default
   opts.headers['Transfer-Encoding'] = 'chunked';
 
+  // if (opts.debugEvents) _debugEvents(server, 'Server');
+
   return new Promise((resolve, reject) => {
     const request = new IncomingMessage({
       url: path,
