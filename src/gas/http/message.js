@@ -30,9 +30,9 @@ const IncomingMessage = (exports.IncomingMessage = function (opts) {
       // autoclose response to fetch request
       process.nextTick(() => self.emit('close'));
     });
-    self._handleClient(opts.fetchResponse);
+    self._createFetchResponse(opts.fetchResponse);
   } else if (opts.serverInjectRequest) {
-    self._handleServer(opts.serverInjectRequest);
+    self._createServerRequest(opts.serverInjectRequest);
   }
 
   return self;
@@ -40,7 +40,7 @@ const IncomingMessage = (exports.IncomingMessage = function (opts) {
 
 inherits(IncomingMessage, stream.Readable);
 
-IncomingMessage.prototype._handleClient = function (response) {
+IncomingMessage.prototype._createFetchResponse = function (response) {
   const self = this;
   if (self._destroyed) return;
 
@@ -57,15 +57,17 @@ IncomingMessage.prototype._handleClient = function (response) {
     }
 
     let payload = Buffer.from(response.getContent()) || null;
+    if (payload) {
+      self._payload = payload;
+    }
 
     self.complete = true;
-    self.push(payload);
   } catch (err) {
     if (!self._destroyed) self.emit('error', err);
   }
 };
 
-IncomingMessage.prototype._handleServer = function (request) {
+IncomingMessage.prototype._createServerRequest = function (request) {
   const self = this;
   if (self._destroyed) return;
 
@@ -77,11 +79,11 @@ IncomingMessage.prototype._handleServer = function (request) {
       self.headers[key.toLowerCase().trim()] = header;
       self.rawHeaders.push(key, header);
     }
-    self.headers['user-agent'] = self.headers['user-agent'] || 'gas';
+    self.headers['user-agent'] = self.headers['user-agent'] || 'gaspack';
 
     let payload = request.payload || null;
     if (payload) {
-      // allow middleware listeners added after request event to fire
+      // wait for middleware listeners (ensure read...end events don't fire before callbacks are initilaized)
       self.pause();
 
       if (typeof payload !== 'string' && !Buffer.isBuffer(payload)) {
@@ -96,9 +98,9 @@ IncomingMessage.prototype._handleServer = function (request) {
         ).toString();
       }
 
-      self.complete = true;
-      self.push(payload);
+      self._payload = payload;
     }
+    self.complete = true;
   } catch (err) {
     if (!self._destroyed) self.emit('error', err);
   }
@@ -122,5 +124,6 @@ IncomingMessage.prototype.setTimeout = function () {};
 
 IncomingMessage.prototype._read = function () {
   const self = this;
+  if (self._payload) self.push(self._payload);
   if (self.complete) self.push(null);
 };

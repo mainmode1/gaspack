@@ -23,8 +23,7 @@ http.createServer = server.create;
 
 // custom GAS functions for request injection & handling doGet()/doPost() events
 http.serverInject = server.inject;
-http.doGet = server.doGet;
-http.doPost = server.doPost;
+http.handleWebAppEvent = server.handleWebAppEvent;
 
 http.STATUS_CODES = statusCodes;
 

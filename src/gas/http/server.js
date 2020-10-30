@@ -27,11 +27,12 @@ server.ServerResponse.prototype._header = '';
 
 server.create = function (opts, requestListener) {
   if (typeof opts === 'function') requestListener = opts;
-  return http.createServer({}, requestListener);
+  const server = http.createServer({}, requestListener);
+  return server;
 };
 
 let start = null;
-const _debugEvents = (emitter, type) => {
+const _debugEvent = (emitter, type) => {
   const oldEmit = emitter.emit,
     end = Date.now(),
     diff = start === null ? 0 : end - start;
@@ -48,7 +49,8 @@ const _debugEvents = (emitter, type) => {
   };
 };
 
-server.inject = function (server = missing('server'), url, opts = {}) {
+server.inject = function (targetServer = missing('server'), url, opts = {}) {
+  if (!(targetServer instanceof http.Server)) throw TypeError('server is not instance of http.Server');
   opts = typeof url === 'string' ? Object.assign(opts, urlToOpts(parseUrl(url))) : url || {};
 
   const protocol = opts.protocol || 'http:';
@@ -65,9 +67,8 @@ server.inject = function (server = missing('server'), url, opts = {}) {
   // node default
   opts.headers['Transfer-Encoding'] = 'chunked';
 
-  // if (opts.debugEvents) _debugEvents(server, 'Server');
-
   return new Promise((resolve, reject) => {
+    // server request (readable stream) is paused to wait for middleware listeners
     const request = new IncomingMessage({
       url: path,
       serverInjectRequest: {
@@ -76,17 +77,17 @@ server.inject = function (server = missing('server'), url, opts = {}) {
         method: opts.method,
         headers: opts.headers,
         payload: opts.payload || opts.data || opts.body,
-        server,
+        targetServer,
       },
     });
-    if (opts.debugEvents) _debugEvents(request, 'ServerRequest');
+    if (opts.debugEvents) _debugEvent(request, 'ServerRequest');
     request.on('error', (err) => reject(err));
 
     const response = new http.ServerResponse(request);
-    if (opts.debugEvents) _debugEvents(response, 'ServerResponse');
+    if (opts.debugEvents) _debugEvent(response, 'ServerResponse');
     response.on('error', (err) => reject(err));
 
-    if (!opts.middleware) {
+    if (!opts.hasMiddleware) {
       request.on('data', (chunk) => {
         request.body = chunk.toString();
       });
@@ -105,7 +106,7 @@ server.inject = function (server = missing('server'), url, opts = {}) {
       // payload as a UTF-8 encoded string
       response.payload = response.rawPayload.toString();
 
-      // new Response(...res.data) when paired with the fetch API
+      // allow new Response(...response.data) when paired with the fetch API
       response.data = {
         body: Utilities.newBlob(response.rawPayload, response.getHeader('content-type') || ''),
         res: {
@@ -119,34 +120,85 @@ server.inject = function (server = missing('server'), url, opts = {}) {
       return resolve(response);
     });
 
-    server.emit('request', request, response);
+    // "queue" request event
+    setImmediate(targetServer.emit.bind(targetServer, 'request', request, response), 0);
 
-    // server requests from inject, ie. IncomingMessage stream, are paused to allow middleware listeners to fire
-    // ... because sync
     if (request.isPaused()) request.resume();
   });
 };
 
-// https://developers.google.com/apps-script/guides/web#request_parameters
+server.handleWebAppEvent = function (e = missing('webapp event obj'), targetServer = missing('server'), opts = {}) {
+  const output = ContentService.createTextOutput();
+  const err = {
+    // https://google.github.io/styleguide/jsoncstyleguide.xml
+    error: {
+      code: undefined,
+      message: undefined,
+    },
+  };
 
-// const options = {
-//   hostname: 'localhost',
-//   path: '/test2', // should include query string if any
-//   method: 'POST',
-//   headers: {
-//     'Content-Type': 'application/x-www-form-urlencoded',
-//     'Content-Length': Buffer.byteLength(postData),
-//   },
-//   data: postData,
-// };
+  if (!(targetServer instanceof http.Server)) {
+    err.error.code = 500;
+    err.error.message = 'target server obj is not instance of http.Server';
+    output.setContent(JSON.stringify(err)).setMimeType(ContentService.MimeType.JSON);
+    return output;
+  }
 
-// e.queryString name=alice&n=1&n=2
-// e.pathInfo
-// e.contentLength (-1 for GET)
-// e.postData.type MIME type of the POST body
-// e.postData.contents text of the POST body
+  // https://developers.google.com/apps-script/guides/web#request_parameters
 
-//TODO
+  const method = e.contentLength === -1 ? 'GET' : 'POST';
 
-server.doGet = function () {};
-server.doPost = function () {};
+  const options = {
+    hostname: 'localhost',
+    path: (e.pathInfo || '/') + (e.queryString ? '?' + e.queryString : ''),
+    protocol: 'https:',
+    method: method,
+    debugEvents: opts.debugEvents || false,
+    hasMiddleware: opts.hasMiddleware || false,
+  };
+
+  if (method === 'POST') {
+    options.headers = {
+      'Content-Type': e.postData.type,
+      'Content-Length': e.contentLength,
+    };
+    options.data = e.postData.contents;
+  }
+
+  server
+    .inject(targetServer, options)
+    .then((res) => {
+
+      // https://developers.google.com/apps-script/reference/content/text-output#setMimeType(MimeType)
+      // ContentService.MimeType
+      //  ATOM
+      //  CSV
+      //  ICAL
+      //  JAVASCRIPT
+      //  JSON
+      //  RSS
+      //  TEXT
+      //  VCARD
+      //  XML
+
+      if (http.STATUS_CODES[res.statusCode] === 'OK') {
+        const type = res.getHeader('content-type') || '';
+        if (type && type === 'application/json') {
+          output.setContent(res.payload).setMimeType(ContentService.MimeType.JSON);
+        } else {
+          output.setContent(res.payload);
+        }
+      } else {
+        err.error.code = res.statusCode;
+        err.error.message = res.payload;
+        output.setContent(JSON.stringify(err)).setMimeType(ContentService.MimeType.JSON);
+      }
+    })
+    .catch((e) => {
+      err.error.code = 500;
+      err.error.message = e.message;
+      output.setContent(JSON.stringify(err)).setMimeType(ContentService.MimeType.JSON);
+    });
+
+  return output;
+};

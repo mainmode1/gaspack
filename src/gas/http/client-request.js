@@ -72,8 +72,8 @@ ClientRequest.prototype._onFinish = function () {
   const opts = self._opts;
 
   const headersObj = self._headers;
-  let body = null;
 
+  let body = null;
   if (opts.method !== 'GET' && opts.method !== 'HEAD') {
     body = Buffer.concat(self._body);
     body = Utilities.newBlob(body, self.getHeader('content-type') || '');
