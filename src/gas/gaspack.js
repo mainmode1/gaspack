@@ -34,6 +34,11 @@
 
   g.Buffer = require('buffer').Buffer;
   g['Buffer.isBuffer'] = require('is-buffer');
+
+  // global URLSearchParams interface is automatically polyfilled
   g.URL = require('./url').URL;
+
+  g.XMLHttpRequest = require('./fetch/xmlhttprequest').XMLHttpRequest;
   g.fetch = require('./fetch');
+
 })(globalThis);
