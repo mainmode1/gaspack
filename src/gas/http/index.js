@@ -25,8 +25,9 @@ http.ServerResponse = server.ServerResponse;
 http.createServer = server.create;
 
 // custom GAS functions for request injection & handling doGet()/doPost() events
-http.serverInject = server.inject;
-http.handleWebAppEvent = server.handleWebAppEvent;
+const gasHttp = require('./gas-http');
+http.serverInject = gasHttp.inject;
+http.handleWebAppRequest = gasHttp.webapp;
 
 http.STATUS_CODES = statusCodes;
 
