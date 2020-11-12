@@ -51,7 +51,13 @@ async function _wrapModule(module = missing('module')) {
     // (?transformed) module source
     module.gas.contents.toString(),
 
-    '\n/*!END ' + module.gas.path + '*/}]',
+    '\n/*!END ' + module.gas.path + '*/',
+
+    // update the 'async' clock
+    // `;'undefined'!=typeof process&&process&&'function'==typeof process.tick&&process.tick();`,
+    // '/*eslint-disable-line no-extra-semi*/',
+
+    '}]',
   ].join('');
 
   return Buffer.from(wrappedSrc);

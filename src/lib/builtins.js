@@ -16,19 +16,23 @@ exports.https = require.resolve('https-browserify');
 exports.path = require.resolve('path-browserify');
 exports.punycode = require.resolve('punycode/');
 exports.querystring = require.resolve('querystring-es3/');
-exports.setimmediate = require.resolve('setimmediate');
+exports['readable-stream'] = require.resolve('readable-stream/readable-browser.js');
+exports['require-url'] = require.resolve('../gas/require-url');
 exports.stream = require.resolve('../gas/stream');
 exports.string_decoder = require.resolve('string_decoder/');
+exports.timers = require.resolve('timers-browserify');
 exports.sys = require.resolve('util/util.js');
 exports.tty = require.resolve('tty-browserify');
 exports.url = require.resolve('../gas/url');
 exports.util = require.resolve('util/util.js');
 exports.vm = require.resolve('../gas/vm');
-exports.zlib = require.resolve('browserify-zlib'); // TODO: works but huge ... implement GAS native instead of pako?
-exports['readable-stream'] = require.resolve('readable-stream/readable-browser.js');
-exports['require-url'] = require.resolve('../gas/require-url');
+exports.zlib = require.resolve('browserify-zlib');
 
 // not implemented
+
+//https://github.com/AndreasMadsen/async-hook/issues/15, https://github.com/creditkarma/async-hooks
+exports.async_hooks = require.resolve('../gas/_empty.js');
+
 exports.child_process = require.resolve('../gas/_empty.js');
 exports.cluster = require.resolve('../gas/_empty.js');
 exports.dgram = require.resolve('../gas/_empty.js');

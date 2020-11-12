@@ -4,26 +4,33 @@
 
   g.process = require('./process');
 
+  if ({}.toString.call(process) === '[object process]') {
+    console.warn('gaspack: process is node-mocked');
+  }
+
   // synchronous GAS polyfill
-  function setTimeout_(fn, delay = 0) {
+  function setTimeoutSync(fn, delay = 0) {
     if ('function' !== typeof fn) throw TypeError(fn + 'is not a function');
     let args = Array.prototype.slice.call(arguments, 2);
     if (delay) Utilities.sleep(delay);
     fn.apply(null, args);
   }
+  g.setTimeout = g.setInterval = setTimeoutSync;
+  g.clearTimeout = g.clearInterval = function () {};
 
-  g.setTimeout = setTimeout_;
-  g.setInterval = setTimeout_;
-  g.clearTimeout = function () {};
-  g.clearInterval = function () {};
-
-  // uses setTimeout(); can be tricked to use process.nextTick()
+  // uses setTimeout(); can be tricked to use process.nextTick() by
+  // process[Symbol.toStringTag] = 'process'
+  // see https://github.com/browserify/timers-browserify
   require('setimmediate');
 
+  // Promise uses setTimeout(); can be tricked to use process.nextTick() by:
+  // process[Symbol.toStringTag] = 'process'
+  // ... or manually by: Promise._setScheduler(setTimeout);
+  // see https://github.com/stefanpenner/es6-promise/blob/master/lib/es6-promise/asap.js
   g.Promise = require('es6-promise').Promise;
-  // uses setTimeout(); can be tricked to use process.nextTick()
-  // manually: Promise._setScheduler(setTimeout);
-  // see https://github.com/stefanpenner/es6-promise/blob/f97e2666e6928745c450752e74213d2438b48b4c/lib/es6-promise/asap.js
+
+  //TODO make optional?
+  require('./async-clock'); // process.clock, monkey patch process.exit() & .tick()
 
   g.Buffer = require('buffer').Buffer;
   g['Buffer.isBuffer'] = require('is-buffer');

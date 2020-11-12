@@ -68,7 +68,6 @@ server.inject = function (targetServer = missing('server'), url, opts = {}) {
   opts.headers['Transfer-Encoding'] = 'chunked';
 
   return new Promise((resolve, reject) => {
-    // server request (readable stream) is paused to wait for middleware listeners
     const request = new IncomingMessage({
       url: path,
       serverInjectRequest: {
@@ -80,22 +79,27 @@ server.inject = function (targetServer = missing('server'), url, opts = {}) {
         targetServer,
       },
     });
-    if (opts.debugEvents) _debugEvent(request, 'ServerRequest');
-    request.on('error', (err) => reject(err));
 
     const response = new http.ServerResponse(request);
+
+    if (opts.debugEvents) _debugEvent(request, 'ServerRequest');
     if (opts.debugEvents) _debugEvent(response, 'ServerResponse');
+
+    request.on('error', (err) => reject(err));
     response.on('error', (err) => reject(err));
 
-    if (!opts.hasMiddleware) {
-      request.on('data', (chunk) => {
+    request.once('readable', () => {
+      let chunk;
+      if (null !== (chunk = request.read())) {
         request.body = chunk.toString();
-      });
-    }
+      }
+    });
 
     response.once('finish', () => {
       // autoclose request
-      process.nextTick(() => request.emit('close'));
+      process.nextTick(() => {
+        request.emit('close');
+      });
 
       // raw payload as a Buffer
       response.rawPayload = response.rawData =
@@ -120,15 +124,18 @@ server.inject = function (targetServer = missing('server'), url, opts = {}) {
       return resolve(response);
     });
 
-    // "queue" request event
-    setImmediate(targetServer.emit.bind(targetServer, 'request', request, response), 0);
+    // if (opts.debugEvents) _debugEvent(targetServer, 'Server');
+
+    // queue request
+    process.nextTick(() => {
+      targetServer.emit('request', request, response);
+    });
 
     if (request.isPaused()) request.resume();
   });
 };
 
-server.handleWebAppEvent = function (e = missing('webapp event obj'), targetServer = missing('server'), opts = {}) {
-  const output = ContentService.createTextOutput();
+server.handleWebAppEvent = function (e = missing('webapp event obj'), targetServer, callback, opts = {}) {
   const err = {
     // https://google.github.io/styleguide/jsoncstyleguide.xml
     error: {
@@ -137,11 +144,14 @@ server.handleWebAppEvent = function (e = missing('webapp event obj'), targetServ
     },
   };
 
-  if (!(targetServer instanceof http.Server)) {
+  if (!targetServer || !(targetServer instanceof http.Server)) {
     err.error.code = 500;
     err.error.message = 'target server obj is not instance of http.Server';
-    output.setContent(JSON.stringify(err)).setMimeType(ContentService.MimeType.JSON);
-    return output;
+    let output = ContentService.createTextOutput()
+      .setContent(JSON.stringify(err))
+      .setMimeType(ContentService.MimeType.JSON);
+    if (typeof callback === 'function') callback(output);
+    return;
   }
 
   // https://developers.google.com/apps-script/guides/web#request_parameters
@@ -154,7 +164,6 @@ server.handleWebAppEvent = function (e = missing('webapp event obj'), targetServ
     protocol: 'https:',
     method: method,
     debugEvents: opts.debugEvents || false,
-    hasMiddleware: opts.hasMiddleware || false,
   };
 
   if (method === 'POST') {
@@ -168,37 +177,39 @@ server.handleWebAppEvent = function (e = missing('webapp event obj'), targetServ
   server
     .inject(targetServer, options)
     .then((res) => {
+      let text = ContentService.createTextOutput().setMimeType(ContentService.MimeType.TEXT);
+      let json = ContentService.createTextOutput().setMimeType(ContentService.MimeType.JSON);
+      let html = HtmlService.createHtmlOutput();
 
-      // https://developers.google.com/apps-script/reference/content/text-output#setMimeType(MimeType)
-      // ContentService.MimeType
-      //  ATOM
-      //  CSV
-      //  ICAL
-      //  JAVASCRIPT
-      //  JSON
-      //  RSS
-      //  TEXT
-      //  VCARD
-      //  XML
-
-      if (http.STATUS_CODES[res.statusCode] === 'OK') {
-        const type = res.getHeader('content-type') || '';
-        if (type && type === 'application/json') {
-          output.setContent(res.payload).setMimeType(ContentService.MimeType.JSON);
-        } else {
-          output.setContent(res.payload);
-        }
-      } else {
+      if (((res.statusCode / 100) | 0) != 2) {
         err.error.code = res.statusCode;
         err.error.message = res.payload;
-        output.setContent(JSON.stringify(err)).setMimeType(ContentService.MimeType.JSON);
+        let output = ContentService.createTextOutput()
+          .setContent(JSON.stringify(err))
+          .setMimeType(ContentService.MimeType.JSON);
+        if (typeof callback === 'function') callback(output);
+      } else {
+        const type = res.getHeader('content-type') || '';
+        if (type) {
+          if (~type.indexOf('application/json')) {
+            json.setContent(res.payload);
+            if (typeof callback === 'function') callback(json);
+          } else if (~type.indexOf('text/html')) {
+            html.setContent(res.payload);
+            if (typeof callback === 'function') callback(html);
+          }
+        } else {
+          text.setContent(res.payload);
+          if (typeof callback === 'function') callback(text);
+        }
       }
     })
     .catch((e) => {
       err.error.code = 500;
       err.error.message = e.message;
-      output.setContent(JSON.stringify(err)).setMimeType(ContentService.MimeType.JSON);
+      let output = ContentService.createTextOutput()
+        .setContent(JSON.stringify(err))
+        .setMimeType(ContentService.MimeType.JSON);
+      if (typeof callback === 'function') callback(output);
     });
-
-  return output;
 };

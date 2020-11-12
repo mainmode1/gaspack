@@ -24,14 +24,22 @@ const defaultBabelOpts = {
 function _injectGlobalsPlugin() {
   return {
     visitor: {
-      // Program(path) {
-      //   path.get('body').unshiftContainer('body', babel.template.ast(`require('globals');`));
-      //   path.skip();
-      // },
-      FunctionDeclaration(path) {
-        path.get('body').unshiftContainer('body', babel.template.ast(`require('gaspack');`));
-        // path.get('body').addComment('inner', '!gaspack', false);
-        path.skip();
+      FunctionDeclaration: {
+        enter(path) {
+          dbgbabel(`${path.node.id.name}() inject "require('gaspack');"`);
+          path.get('body').unshiftContainer('body', babel.template.ast(`require('gaspack');`));
+        },
+        exit(path) {
+          dbgbabel(`${path.node.id.name}() inject "process.exit();"`);
+          const blockStatement = path.get('body');
+          const lastExpression = blockStatement.get('body').pop();
+          const processExitStatement = babel.template.ast(`process.exit();`);
+          if (lastExpression.type !== 'ReturnStatement') {
+            lastExpression.insertAfter(processExitStatement);
+          } else {
+            lastExpression.insertBefore(processExitStatement);
+          }
+        },
       },
     },
   };
@@ -56,8 +64,9 @@ const defaultPlugins = [
       // https://github.com/rpetrich/babel-plugin-transform-async-to-promises
       inlineHelpers: true,
       externalHelpers: false,
-      minify: true,
+      minify: false,
       hoist: false,
+      target: 'es6',
     },
   ],
   [
@@ -78,17 +87,17 @@ function gasTransforms({ noBabel = false, isEntry = false, source = '', filename
     if (!isBuffer(source)) source = Buffer.from(source);
     if (noBabel) return source;
 
-    const transpiled = babel.transformSync(source.toString(), babelOpts);
     dbgbabel('gasTransforms (source)', filename);
+    const transpiled = babel.transformSync(source.toString(), babelOpts);
     return Buffer.from(transpiled.code);
   } else {
     if (noBabel) return cleanSrcBuf(fs.readFileSync(filename));
 
+    dbgbabel('gasTransforms (file)', filename);
     const transpiled = babel.transformFileSync(
       filename,
       xtend(defaultBabelOpts, { sourceType: isEntry ? 'script' : 'module' }, { plugins: defaultPlugins }),
     );
-    dbgbabel('gasTransforms (file)', filename);
     return Buffer.from(transpiled.code);
   }
 }
@@ -97,6 +106,7 @@ function injectBuiltinGlobals({ noGlobals = false, isEntry = false, source = mis
   if (!isBuffer(source)) source = Buffer.from(source);
   if (noGlobals || !isEntry) return source;
 
+  dbgbabel('injectBuiltinGlobals', filename);
   const transpiled = babel.transformSync(
     source.toString(),
     xtend(
@@ -105,7 +115,6 @@ function injectBuiltinGlobals({ noGlobals = false, isEntry = false, source = mis
       { plugins: [[_injectGlobalsPlugin, { concise: false }]] },
     ),
   );
-  dbgbabel('injectBuiltinGlobals', filename);
   return Buffer.from(transpiled.code);
 }
 

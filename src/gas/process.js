@@ -1,10 +1,91 @@
-// shim for using process in GAS
-// adapted from https://github.com/defunctzombie/node-process/blob/master/browser.js
+function noop() {}
 
+// adapted from https://github.com/defunctzombie/node-process/blob/master/browser.js
 const process = (module.exports = {});
 
-// trick polyfills to use process.nextTick()
+// trick some polyfills to use process.nextTick()
 // process[Symbol.toStringTag] = 'process';
+
+process.platform = process.arch = process.execPath = process.title = 'gas';
+process.pid = 1;
+process.browser = false;
+process.env = {};
+process.argv = [];
+process.version = ''; // empty string to avoid regexp issues
+process.versions = {};
+process.features = {};
+
+// may be checked if typeof 'function' to determine if Node process events capable
+process.on = undefined;
+
+process.addListener = process.once = process.off = process.removeListener = process.removeAllListeners = process.emit = process.prependListener = process.prependOnceListener = process.listeners = function () {
+  throw Error('process events not supported');
+};
+
+process.binding = function (/*name*/) {
+  throw Error('process.binding is not supported');
+};
+
+(function () {
+  let cwd = require('../gas/fs/gdrive').cwd();
+  let path;
+  process.cwd = function () {
+    return cwd;
+  };
+  process.chdir = function (dir) {
+    if (!path) path = require('path');
+    cwd = path.resolve(dir, cwd);
+  };
+})();
+
+process.umask = function () {
+  return 0;
+};
+
+process.exitCode = null;
+process.exit = process.kill = process.dlopen = process.uptime = process.memoryUsage = process.uvCounters = noop;
+
+process.tick = noop;
+
+process.start = Date.now();
+
+process.hrtime = function (prev) {
+  var millisSinceStart = Date.now() - process.start;
+  var secsSinceStart = Math.floor(millisSinceStart / 1000);
+  var remainderInNanos = (millisSinceStart - secsSinceStart * 1e3) * 1e6;
+
+  if (Array.isArray(prev)) {
+    if (prev[1] > 1e9) {
+      throw new TypeError("Number of nanoseconds can't exceed a billion");
+    }
+
+    var oldSecs = prev[0];
+    var nanoDiff = remainderInNanos - prev[1];
+    var secDiff = secsSinceStart - oldSecs;
+
+    if (nanoDiff < 0) {
+      nanoDiff += 1e9;
+      secDiff -= 1;
+    }
+
+    return [secDiff, nanoDiff];
+  }
+  return [secsSinceStart, remainderInNanos];
+};
+
+process.stack = (e) => {
+  if (e && Object.prototype.hasOwnProperty.call(e, 'stack')) {
+    return `${e.message} ${e.stack.split('\n').slice(1, -1).join(' ').replace(/\s\s+/g, ' ')}`;
+  } else {
+    try {
+      throw Error();
+    } catch (err) {
+      return `${e || ''} ${err.stack.split('\n').slice(2, -1).join(' ').replace(/\s\s+/g, ' ')}`;
+    }
+  }
+};
+
+/* *** */
 
 // cached from whatever global is present so that test runners that stub it
 // don't break things.  But we need to wrap it in a try catch in case it is
@@ -151,54 +232,4 @@ function Item(fun, array) {
 }
 Item.prototype.run = function () {
   this.fun.apply(null, this.array);
-};
-
-process.platform = process.arch = process.execPath = process.title = 'gas';
-process.pid = 1;
-process.browser = false;
-process.env = {};
-process.argv = [];
-process.version = ''; // empty string to avoid regexp issues
-process.versions = {};
-process.features = {};
-
-function noop() {}
-
-process.on = process.addListener = process.once = process.off = process.removeListener = process.removeAllListeners = process.emit = process.prependListener = process.prependOnceListener = noop;
-process.listeners = function (/*name*/) {
-  return [];
-};
-
-process.binding = function (/*name*/) {
-  throw Error('process.binding is not supported');
-};
-
-(function () {
-  let cwd = require('../gas/fs/gdrive').cwd();
-  let path;
-  process.cwd = function () {
-    return cwd;
-  };
-  process.chdir = function (dir) {
-    if (!path) path = require('path');
-    cwd = path.resolve(dir, cwd);
-  };
-})();
-
-process.umask = function () {
-  return 0;
-};
-
-process.exit = process.kill = process.dlopen = process.uptime = process.memoryUsage = process.uvCounters = noop;
-
-process.stack = (e) => {
-  if (e && Object.prototype.hasOwnProperty.call(e, 'stack')) {
-    return `${e.message} ${e.stack.split('\n').slice(1, -1).join(' ').replace(/\s\s+/g, ' ')}`;
-  } else {
-    try {
-      throw Error();
-    } catch (err) {
-      return `${e || ''} ${err.stack.split('\n').slice(2, -1).join(' ').replace(/\s\s+/g, ' ')}`;
-    }
-  }
 };

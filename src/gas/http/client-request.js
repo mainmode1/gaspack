@@ -2,7 +2,6 @@
 
 const inherits = require('inherits');
 const stream = require('readable-stream');
-const statusCodes = require('builtin-status-codes');
 
 const urlFetch = require('../backoff').wrap(eval('UrlFetch' + 'App').fetch);
 
@@ -86,24 +85,26 @@ ClientRequest.prototype._onFinish = function () {
     urlFetchHeaders[name] = value;
   });
 
-  // https://developers.google.com/apps-script/reference/url-fetch/url-fetch-app
+  try {
+    // https://developers.google.com/apps-script/reference/url-fetch/url-fetch-app
 
-  const urlFetchOpts = {
-    method: opts.method,
-    headers: urlFetchHeaders,
-    payload: body || undefined,
-    followRedirects: true, // default
-    muteHttpExceptions: true,
-  };
+    const urlFetchOpts = {
+      method: opts.method,
+      headers: urlFetchHeaders,
+      payload: body || undefined,
+      followRedirects: true, // default
+      muteHttpExceptions: true,
+    };
 
-  const response = urlFetch(self._opts.url, urlFetchOpts);
+    const response = urlFetch(self._opts.url, urlFetchOpts);
 
-  const code = response.getResponseCode();
-  if (((code / 100) | 0) == 2) {
     self._fetchResponse = response;
     self._connect();
-  } else {
-    if (!self.destroyed) self.emit('error', statusCodes[code]);
+  } catch (err) {
+    process.nextTick(() => {
+      self.emit('error', err);
+    });
+    return;
   }
 };
 
@@ -111,13 +112,23 @@ ClientRequest.prototype._connect = function () {
   const self = this;
   if (self.destroyed) return;
 
-  self._response = new IncomingMessage({ url: self._opts.url, fetchResponse: self._fetchResponse });
-
-  self._response.on('error', (err) => {
-    self.emit('error', err);
+  self._response = new IncomingMessage({
+    url: self._opts.url,
+    method: self._opts.method,
+    fetchResponse: self._fetchResponse,
   });
 
-  self.emit('response', self._response);
+  // ensure that response events are 'async'
+
+  self._response.on('error', (err) => {
+    process.nextTick(() => {
+      self.emit('error', err);
+    });
+  });
+
+  process.nextTick(() => {
+    self.emit('response', self._response);
+  });
 };
 
 ClientRequest.prototype._write = function (data, encoding, cb) {
@@ -134,7 +145,10 @@ ClientRequest.prototype.destroy = function (err) {
   const self = this;
   self.destroyed = true;
   if (self._response) self._response._destroyed = true;
-  if (err) self.emit('error', err);
+  if (err)
+    process.nextTick(() => {
+      self.emit('error', err);
+    });
   return this;
 };
 

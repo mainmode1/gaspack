@@ -28,7 +28,9 @@ const IncomingMessage = (exports.IncomingMessage = function (opts) {
   if (opts.fetchResponse) {
     self.on('end', () => {
       // autoclose response to fetch request
-      process.nextTick(() => self.emit('close'));
+      process.nextTick(() => {
+        self.emit('close');
+      });
     });
     self._createFetchResponse(opts.fetchResponse);
   } else if (opts.serverInjectRequest) {
@@ -83,9 +85,6 @@ IncomingMessage.prototype._createServerRequest = function (request) {
 
     let payload = request.payload || null;
     if (payload) {
-      // wait for middleware listeners (ensure read...end events don't fire before callbacks are initilaized)
-      self.pause();
-
       if (typeof payload !== 'string' && !Buffer.isBuffer(payload)) {
         payload = JSON.stringify(payload);
         self.headers['content-type'] = self.headers['content-type'] || 'application/json';

@@ -1,5 +1,8 @@
 // adapted from: https://github.com/jhiesey/stream-http & https://github.com/rill-js/http
 
+// force early-loading
+require('iconv-lite/encodings');
+
 const statusCodes = require('builtin-status-codes');
 
 const client = require('./client');

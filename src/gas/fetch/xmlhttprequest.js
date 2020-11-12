@@ -192,7 +192,7 @@ exports.XMLHttpRequest = function () {
       throw new Error('INVALID_STATE_ERR: setRequestHeader can only be called when state is OPEN');
     }
     if (!isAllowedHttpHeader(header)) {
-      console.error('xmlhttprequest: Refused to set unsafe header "' + header + '"');
+      console.warn('Refused to set unsafe header "' + header + '"');
       return;
     }
     if (sendFlag) {
@@ -272,8 +272,6 @@ exports.XMLHttpRequest = function () {
       throw new Error('INVALID_STATE_ERR: send has already been called');
     }
 
-    // console.log('xmlhttprequest: send', data);
-
     var ssl = false;
     // var local = false;
     var url = Url.parse(settings.url);
@@ -336,26 +334,26 @@ exports.XMLHttpRequest = function () {
 
     // Default to port 80. If accessing localhost on another port be sure
     // to use http://localhost:port/path
-    var port = url.port; // || (ssl ? 443 : 80);
+    var port = url.port || (ssl ? 443 : 80);
     // Add query string if one is used
     var uri = url.pathname + (url.search ? url.search : '');
 
     // Set the defaults if they haven't been set
-    // for (var name in defaultHeaders) {
-    //   if (!headersCase[name.toLowerCase()]) {
-    //     headers[name] = defaultHeaders[name];
-    //   }
-    // }
+    for (var name in defaultHeaders) {
+      if (!headersCase[name.toLowerCase()]) {
+        headers[name] = defaultHeaders[name];
+      }
+    }
 
     // Set the Host header or the server may reject the request
-    // headers.Host = host;
-    // // IPv6 addresses must be escaped with brackets
-    // if (url.host[0] === '[') {
-    //   headers.Host = '[' + headers.Host + ']';
-    // }
-    // if (!((ssl && port === 443) || port === 80)) {
-    //   headers.Host += ':' + url.port;
-    // }
+    headers.Host = host;
+    // IPv6 addresses must be escaped with brackets
+    if (url.host[0] === '[') {
+      headers.Host = '[' + headers.Host + ']';
+    }
+    if (!((ssl && port === 443) || port === 80)) {
+      headers.Host += ':' + url.port;
+    }
 
     // Set Basic Auth if necessary
     if (settings.user) {
@@ -410,48 +408,45 @@ exports.XMLHttpRequest = function () {
         // Set response var to the response we got back
         // This is so it remains accessable outside this scope
         response = resp;
-
         // Check for redirect
         // @TODO Prevent looped redirects
-        // if (
-        //   response.statusCode === 301 ||
-        //   response.statusCode === 302 ||
-        //   response.statusCode === 303 ||
-        //   response.statusCode === 307
-        // ) {
-        //   // Change URL to the redirect location
-        //   settings.url = response.headers.location;
-        //   var url = Url.parse(settings.url);
-        //   // Set host var in case it's used later
-        //   host = url.hostname;
-        //   // Options for the new request
-        //   var newOptions = {
-        //     hostname: url.hostname,
-        //     port: url.port,
-        //     path: url.path,
-        //     method: response.statusCode === 303 ? 'GET' : settings.method,
-        //     headers: headers,
-        //     withCredentials: self.withCredentials,
-        //   };
+        if (
+          response.statusCode === 301 ||
+          response.statusCode === 302 ||
+          response.statusCode === 303 ||
+          response.statusCode === 307
+        ) {
+          // Change URL to the redirect location
+          settings.url = response.headers.location;
+          var url = Url.parse(settings.url);
+          // Set host var in case it's used later
+          host = url.hostname;
+          // Options for the new request
+          var newOptions = {
+            hostname: url.hostname,
+            port: url.port,
+            path: url.path,
+            method: response.statusCode === 303 ? 'GET' : settings.method,
+            headers: headers,
+            withCredentials: self.withCredentials,
+          };
 
-        //   // Issue the new request
-        //   request = doRequest(newOptions, responseHandler).on('error', errorHandler);
-        //   request.end();
-        //   // @TODO Check if an XHR event needs to be fired here
-        //   return;
-        // }
+          // Issue the new request
+          request = doRequest(newOptions, responseHandler).on('error', errorHandler);
+          request.end();
+          // @TODO Check if an XHR event needs to be fired here
+          return;
+        }
 
-        response.setEncoding('utf8');
+        // response.setEncoding('utf8');
 
         setState(self.HEADERS_RECEIVED);
         self.status = response.statusCode;
 
         response.on('data', function (chunk) {
-          // console.log('xmlhttprequest: got data!', chunk);
-
           // Make sure there's some data
           if (chunk) {
-            self.responseText += chunk;
+            self.responseText += chunk.toString('utf8');
           }
           // Don't emit state changes if the connection has been aborted.
           if (sendFlag) {
@@ -459,28 +454,25 @@ exports.XMLHttpRequest = function () {
           }
         });
 
-        // response.on('end', function () {
-        //   if (sendFlag) {
-        //     // Discard the end event if the connection has been aborted
-        //     setState(self.DONE);
-        //     sendFlag = false;
-        //   }
-        // });
+        response.on('end', function () {
+          if (sendFlag) {
+            // Discard the end event if the connection has been aborted
+            setState(self.DONE);
+            sendFlag = false;
+          }
+        });
 
         response.on('error', function (error) {
-          // console.log('xmlhttprequest: response error', error);
           self.handleError(error);
         });
       };
 
       // Error handler for the request
       var errorHandler = function errorHandler(error) {
-        // console.log('xmlhttprequest: request error', error);
         self.handleError(error);
       };
 
       // Create the request
-      // console.log('xmlhttprequest: doRequest', options);
       request = doRequest(options, responseHandler).on('error', errorHandler);
 
       // Node 0.4 and later won't accept empty data. Make sure it's needed.
@@ -490,13 +482,7 @@ exports.XMLHttpRequest = function () {
 
       request.end();
 
-      // self.dispatchEvent('loadstart');
-
-      // GAS http -> UrlFetchApp is sync, we're done
-      if (sendFlag) {
-        setState(self.DONE);
-        sendFlag = false;
-      }
+      self.dispatchEvent('loadstart');
 
       // } else {
       //   // Synchronous
@@ -571,7 +557,6 @@ exports.XMLHttpRequest = function () {
    * Called when an error is encountered to deal with it.
    */
   this.handleError = function (error) {
-    // console.log('xmlhttprequest: handleError', error);
     this.status = 0;
     this.statusText = error;
     this.responseText = error.stack;
@@ -636,7 +621,6 @@ exports.XMLHttpRequest = function () {
    * Dispatch any events, including both "on" methods and events attached using addEventListener.
    */
   this.dispatchEvent = function (event) {
-    // console.log('xmlhttprequest: dispatchEvent', event);
     if (typeof self['on' + event] === 'function') {
       self['on' + event]();
     }
@@ -653,7 +637,6 @@ exports.XMLHttpRequest = function () {
    * @param int state New state
    */
   var setState = function (state) {
-    // console.log('xmlhttprequest: setState', state);
     if (state == self.LOADING || self.readyState !== state) {
       self.readyState = state;
 
